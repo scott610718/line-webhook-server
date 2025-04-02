@@ -1,0 +1,14 @@
+{
+  "name": "line-webhook-server",
+  "version": "1.0.0",
+  "description": "LINE webhook server to receive image messages",
+  "main": "webhook-server.js",
+  "scripts": {
+    "start": "node webhook-server.js"
+  },
+  "dependencies": {
+    "@line/bot-sdk": "^7.5.0",
+    "axios": "^1.6.0",
+    "express": "^4.18.2"
+  }
+}

@@ -1,0 +1,74 @@
+
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>營北國中 Google 安全登入</title>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.22.2/firebase-app-compat.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.22.2/firebase-database-compat.min.js"></script>
+  <style>
+    body { font-family: Arial; padding: 30px; background: #f9f9f9; }
+    .container { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); max-width: 400px; margin: auto; text-align: center; }
+    #message { margin-top: 20px; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>營北國中 Google 安全登入</h1>
+    <p>請點擊下方按鈕登入 Google</p>
+    <div id="g_id_onload"
+         data-client_id="YOUR_GOOGLE_CLIENT_ID"
+         data-callback="handleCredentialResponse"
+         data-auto_prompt="false">
+    </div>
+    <div class="g_id_signin"
+         data-type="standard"
+         data-size="large"
+         data-theme="outline"
+         data-text="sign_in_with"
+         data-shape="pill"
+         data-logo_alignment="left">
+    </div>
+    <div id="message"></div>
+  </div>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyArF8xncLwA3osSQ_o6yWIyuOc0TMrXRTY",
+      authDomain: "yingpei--login.firebaseapp.com",
+      databaseURL: "https://yingpei--login-default-rtdb.firebaseio.com",
+      projectId: "yingpei--login",
+      storageBucket: "yingpei--login.firebasestorage.app",
+      messagingSenderId: "261477282402",
+      appId: "1:261477282402:web:557f0be058e07cd642173b",
+      measurementId: "G-EB9PR17TJL"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const database = firebase.database();
+
+    function handleCredentialResponse(response) {
+      const token = response.credential;
+      const connectionId = localStorage.getItem('lastScannedConnectionId');
+      if (!connectionId) {
+        showMessage('尚未掃描 QR Code，請重新操作', 'error');
+        return;
+      }
+      const connectionRef = database.ref('connections/' + connectionId);
+      connectionRef.set({
+        token: token,
+        status: 'token_sent',
+        timestamp: Date.now()
+      });
+      showMessage('登入成功，已傳送驗證資訊給電腦', 'success');
+    }
+
+    function showMessage(msg, type) {
+      const el = document.getElementById('message');
+      el.textContent = msg;
+      el.style.color = type === 'success' ? 'green' : 'red';
+    }
+  </script>
+</body>
+</html>

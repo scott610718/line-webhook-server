@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>授權完成</title>
+    <!-- 引入Firebase SDK -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.22.2/firebase-app-compat.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.22.2/firebase-database-compat.min.js"></script>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            text-align: center;
+            padding: 20px;
+        }
+        .message {
+            margin: 20px;
+            padding: 15px;
+            border-radius: 8px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <h1>Google 授權完成</h1>
+    <div id="message" class="message"></div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const messageElement = document.getElementById('message');
+            
+            // 初始化 Firebase
+            const firebaseConfig = {
+                apiKey: "AIzaSyArF8xncLwA3osSQ_o6yWIyuOc0TMrXRTY",
+                authDomain: "yingpei--login.firebaseapp.com",
+                databaseURL: "https://yingpei--login-default-rtdb.firebaseio.com",
+                projectId: "yingpei--login",
+                storageBucket: "yingpei--login.firebasestorage.app",
+                messagingSenderId: "261477282402",
+                appId: "1:261477282402:web:557f0be058e07cd642173b",
+                measurementId: "G-EB9PR17TJL"
+            };
+            
+            firebase.initializeApp(firebaseConfig);
+            const database = firebase.database();
+            
+            // 解析 URL 哈希部分獲取訪問令牌
+            const hash = window.location.hash.substring(1);
+            const params = new URLSearchParams(hash);
+            const accessToken = params.get('access_token');
+            const connectionId = params.get('state') || localStorage.getItem('pendingConnectionId');
+            
+            if (!accessToken) {
+                messageElement.textContent = '授權失敗，未獲取訪問令牌。';
+                messageElement.className = 'message error';
+                return;
+            }
+            
+            if (!connectionId) {
+                messageElement.textContent = '無法識別連接，請重新掃描 QR 碼。';
+                messageElement.className = 'message error';
+                return;
+            }
+            
+            // 獲取用戶信息
+            fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                headers: { 'Authorization': `Bearer ${accessToken}` }
+            })
+            .then(response => response.json())
+            .then(userData => {
+                // 將訪問令牌發送到 Firebase
+                const connectionRef = database.ref('connections/' + connectionId);
+                connectionRef.update({
+                    access_token: accessToken,
+                    user_email: userData.email,
+                    user_name: userData.name,
+                    status: 'authenticated',
+                    authentication_time: Date.now()
+                });
+                
+                messageElement.textContent = '授權成功！請返回到桌面端查看。';
+                messageElement.className = 'message success';
+                
+                // 清除暫存的連接 ID
+                localStorage.removeItem('pendingConnectionId');
+            })
+            .catch(error => {
+                console.error('Error fetching user data:', error);
+                messageElement.textContent = '獲取用戶資料失敗。';
+                messageElement.className = 'message error';
+            });
+        });
+    </script>
+</body>
+</html>

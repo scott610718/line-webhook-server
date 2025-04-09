@@ -1,0 +1,477 @@
+<!-- 修改後的手機端應用 (mobile.html) -->
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>營北國中Google登入 - 手機端</title>
+    <!-- 引入Firebase SDK -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.22.2/firebase-app-compat.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.22.2/firebase-database-compat.min.js"></script>
+    <!-- QR Scanner Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.4/html5-qrcode.min.js"></script>
+    <!-- 加密庫 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #4285F4;
+            text-align: center;
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        input[type="email"], input[type="password"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 16px;
+        }
+        .buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        button {
+            background-color: #4285F4;
+            color: white;
+            border: none;
+            padding: 12px 0;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            flex: 1;
+        }
+        button.secondary {
+            background-color: #34A853;
+        }
+        #scannerContainer {
+            margin-top: 20px;
+            display: none;
+        }
+        #scanner {
+            width: 100%;
+            height: 250px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        #message {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 4px;
+            text-align: center;
+            display: none;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+            /* 進度指示器 */
+    .progress-container {
+        margin-top: 20px;
+        display: none;
+    }
+    
+    .progress-steps {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 15px;
+        position: relative;
+    }
+    
+    .progress-steps::before {
+        content: '';
+        position: absolute;
+        top: 15px;
+        left: 20px;
+        right: 20px;
+        height: 2px;
+        background: #ddd;
+        z-index: 1;
+    }
+    
+    .step {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        background: #ddd;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        position: relative;
+        z-index: 2;
+    }
+    
+    .step.active {
+        background: #4285F4;
+        color: white;
+    }
+    
+    .step.completed {
+        background: #34A853;
+        color: white;
+    }
+    
+    .step-label {
+        position: absolute;
+        top: 35px;
+        left: 50%;
+        transform: translateX(-50%);
+        white-space: nowrap;
+        font-size: 12px;
+        color: #555;
+    }
+    
+    /* 動畫 */
+    @keyframes pulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+        100% { transform: scale(1); }
+    }
+    
+    .pulse {
+        animation: pulse 1.5s infinite;
+    }
+    
+    /* 改良表單樣式 */
+    .form-group input:focus {
+        outline: none;
+        border-color: #4285F4;
+        box-shadow: 0 0 0 2px rgba(66, 133, 244, 0.2);
+    }
+    
+    /* 密碼可見性切換 */
+    .password-container {
+        position: relative;
+    }
+    
+    .toggle-password {
+        position: absolute;
+        right: 10px;
+        top: 12px;
+        cursor: pointer;
+        color: #555;
+    }
+    
+    /* 響應式調整 */
+    @media (max-width: 480px) {
+        .container {
+            padding: 15px;
+        }
+        
+        button {
+            padding: 10px 0;
+        }
+    }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>營北國中Google登入系統</h1>
+        
+        <div class="form-group">
+            <label for="email">Google 帳號</label>
+            <input type="email" id="email" placeholder="請輸入您的 Google 帳號">
+        </div>
+        
+       <div class="form-group">
+            <label for="password">密碼</label>
+            <div class="password-container">
+                <input type="password" id="password" placeholder="請輸入您的密碼">
+                <span class="toggle-password" id="togglePassword">👁️</span>
+            </div>
+        </div>
+        
+        <div class="buttons">
+            <button id="saveButton">儲存資料</button>
+            <button id="scanButton" class="secondary">掃描 QR Code</button>
+        </div>
+        
+        <div id="scannerContainer">
+            <div id="scanner"></div>
+        </div>
+        
+        <div id="message"></div>
+    </div>
+    <div class="progress-container" id="progressContainer">
+        <div class="progress-steps">
+            <div class="step active" id="step1">
+                1
+                <div class="step-label">掃描QR碼</div>
+            </div>
+            <div class="step" id="step2">
+                2
+                <div class="step-label">傳送資料</div>
+            </div>
+            <div class="step" id="step3">
+                3
+                <div class="step-label">登入完成</div>
+            </div>
+        </div>
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Firebase 設定
+            const firebaseConfig = {
+               apiKey: "AIzaSyArF8xncLwA3osSQ_o6yWIyuOc0TMrXRTY",
+               authDomain: "yingpei--login.firebaseapp.com",
+               databaseURL: "https://yingpei--login-default-rtdb.firebaseio.com",
+               projectId: "yingpei--login",
+               storageBucket: "yingpei--login.firebasestorage.app",
+               messagingSenderId: "261477282402",
+               appId: "1:261477282402:web:557f0be058e07cd642173b",
+               measurementId: "G-EB9PR17TJL"
+            };
+            
+            // 初始化 Firebase
+            firebase.initializeApp(firebaseConfig);
+            const database = firebase.database();
+            
+            // 檢查是否有儲存的帳號資料
+            const savedEmail = localStorage.getItem('googleEmail');
+            const savedPassword = localStorage.getItem('googlePassword');
+            
+            if (savedEmail) {
+                document.getElementById('email').value = savedEmail;
+                document.getElementById('password').value = savedPassword ? '********' : '';
+            }
+            
+            // 儲存按鈕點擊事件
+            document.getElementById('saveButton').addEventListener('click', () => {
+                const email = document.getElementById('email').value.trim();
+                const password = document.getElementById('password').value.trim();
+                
+                if (!email || !password) {
+                    showMessage('請輸入帳號和密碼', 'error');
+                    return;
+                }
+                
+                // 使用 AES 加密密碼
+                const encryptedPassword = CryptoJS.AES.encrypt(password, 'yingbei-secure-key').toString();
+                
+                // 儲存到 localStorage
+                localStorage.setItem('googleEmail', email);
+                localStorage.setItem('googlePassword', encryptedPassword);
+                
+                showMessage('資料已儲存', 'success');
+            });
+            
+            // 掃描按鈕點擊事件
+            document.getElementById('scanButton').addEventListener('click', () => {
+                const scannerContainer = document.getElementById('scannerContainer');
+                
+                if (scannerContainer.style.display === 'block') {
+                    html5QrCode.stop();
+                    scannerContainer.style.display = 'none';
+                    return;
+                }
+                
+                // 檢查是否有儲存的資料
+                const email = localStorage.getItem('googleEmail');
+                const encryptedPassword = localStorage.getItem('googlePassword');
+                
+                if (!email || !encryptedPassword) {
+                    showMessage('請先儲存您的登入資料', 'error');
+                    return;
+                }
+                
+                scannerContainer.style.display = 'block';
+                
+                // 使用 HTML5 QR Code 庫來掃描 QR Code
+                const html5QrCode = new Html5Qrcode("scanner");
+                const qrCodeSuccessCallback = (connectionId) => {
+                    // 解密存儲的密碼
+                    const password = CryptoJS.AES.decrypt(encryptedPassword, 'yingbei-secure-key').toString(CryptoJS.enc.Utf8);
+                    
+                    // 將登入資料發送到 Firebase
+                    sendLoginData(connectionId, email, password);
+                    
+                    // 停止掃描
+                    html5QrCode.stop();
+                    scannerContainer.style.display = 'none';
+                };
+                
+                const config = { fps: 10, qrbox: { width: 200, height: 200 } };
+                
+                html5QrCode.start(
+                    { facingMode: "environment" }, 
+                    config, 
+                    qrCodeSuccessCallback
+                ).catch((err) => {
+                    showMessage('無法啟動相機，請確認已授權', 'error');
+                    console.error(err);
+                    scannerContainer.style.display = 'none';
+                });
+            });
+            
+            // 發送登入資料到 Firebase Realtime Database
+// 修改掃描 QR 碼後的行為
+function sendLoginData(connectionId, email, password) {
+    try {
+        // 顯示進度指示器
+        updateProgressStep(1);
+        
+        // 建立 Firebase 連接參考
+        const connectionRef = database.ref('connections/' + connectionId);
+        
+        // 記錄連接狀態
+        connectionRef.set({
+            status: 'pending',
+            timestamp: Date.now(),
+            device: {
+                type: 'mobile',
+                userAgent: navigator.userAgent,
+                platform: navigator.platform
+            }
+        });
+        
+        // 更新進度
+        updateProgressStep(2);
+        
+        // 使用 Google OAuth 流程
+        const clientId = '130403455153-cdmr57ri7qh3s6c8riul6q6hsi3arjf8.apps.googleusercontent.com';
+        const redirectUri = "https://scott610718.github.io/yingbei-google-login/mobile-callback.html";
+        const scope = 'email profile https://www.googleapis.com/auth/drive.readonly';
+        
+        // 建立 OAuth URL 時附加 connection_id 作為狀態參數
+        const authUrl = `https://accounts.google.com/o/oauth2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${encodeURIComponent(scope)}&login_hint=${encodeURIComponent(email)}&state=${connectionId}`;
+        
+        // 儲存 connectionId 以便回調頁面使用
+        localStorage.setItem('pendingConnectionId', connectionId);
+        
+        // 重定向到 Google 授權頁面
+        window.location.href = authUrl;
+        
+    } catch (error) {
+        showMessage('連線錯誤，請確保網路連線正常', 'error');
+        console.error('Firebase error:', error);
+        document.getElementById('progressContainer').style.display = 'none';
+    }
+}
+            
+            // 顯示訊息
+            function showMessage(text, type) {
+                const messageElement = document.getElementById('message');
+                messageElement.textContent = text;
+                messageElement.className = type;
+                messageElement.style.display = 'block';
+                
+                setTimeout(() => {
+                    messageElement.style.display = 'none';
+                }, 3000);
+            }
+        });
+// 密碼可見性切換
+document.getElementById('togglePassword').addEventListener('click', function() {
+    const passwordInput = document.getElementById('password');
+    
+    if (passwordInput.type === 'password') {
+        passwordInput.type = 'text';
+        this.textContent = '🔒';
+    } else {
+        passwordInput.type = 'password';
+        this.textContent = '👁️';
+    }
+});
+
+// 更新進度指示器
+function updateProgressStep(step) {
+    const progressContainer = document.getElementById('progressContainer');
+    progressContainer.style.display = 'block';
+    
+    for (let i = 1; i <= 3; i++) {
+        const stepElement = document.getElementById('step' + i);
+        
+        if (i < step) {
+            stepElement.classList.remove('active');
+            stepElement.classList.add('completed');
+        } else if (i === step) {
+            stepElement.classList.add('active');
+            stepElement.classList.remove('completed');
+            stepElement.classList.add('pulse');
+        } else {
+            stepElement.classList.remove('active', 'completed', 'pulse');
+        }
+    }
+}
+
+// 在發送登入資料之前更新進度
+function sendLoginData(connectionId, email, password) {
+    try {
+        // 顯示進度指示器
+        updateProgressStep(1);
+        
+        // 建立 Firebase 連接參考
+        const connectionRef = database.ref('connections/' + connectionId);
+        
+        // 記錄連接狀態
+        connectionRef.set({
+            status: 'pending',
+            timestamp: Date.now(),
+            device: {
+                type: 'mobile',
+                userAgent: navigator.userAgent,
+                platform: navigator.platform
+            }
+        });
+        
+        // 更新進度
+        updateProgressStep(2);
+        
+        // 使用 Google OAuth 流程
+        const clientId = '130403455153-cdmr57ri7qh3s6c8riul6q6hsi3arjf8.apps.googleusercontent.com';
+        // 使用絕對URL，必須與Google開發者控制台中註冊的完全一致
+        const redirectUri = "https://scott610718.github.io/yingbei-google-login/mobile-callback.html";
+        const scope = 'email profile https://www.googleapis.com/auth/drive.readonly';
+        
+        // 建立 OAuth URL 時附加 connection_id 作為狀態參數
+        const authUrl = `https://accounts.google.com/o/oauth2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${encodeURIComponent(scope)}&login_hint=${encodeURIComponent(email)}&state=${connectionId}`;
+        
+        // 儲存 connectionId 以便回調頁面使用
+        localStorage.setItem('pendingConnectionId', connectionId);
+        
+        // 在重定向前顯示訊息
+        showMessage('正在連接到 Google 授權頁面...', 'waiting');
+        
+        // 重定向到 Google 授權頁面
+        window.location.href = authUrl;
+        
+    } catch (error) {
+        showMessage('連線錯誤，請確保網路連線正常', 'error');
+        console.error('Firebase error:', error);
+        document.getElementById('progressContainer').style.display = 'none';
+    }
+}
+    </script>
+</body>
+</html>

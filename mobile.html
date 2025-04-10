@@ -59,8 +59,22 @@
         .error {
             color: red;
         }
+        .warning {
+            color: orange;
+        }
         #loginSection {
             margin-top: 20px;
+        }
+        #debugInfo {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 150px;
+            overflow-y: auto;
+            background-color: #f8f9fa;
         }
     </style>
 </head>
@@ -72,7 +86,7 @@
         <div id="loginSection">
             <p>請先使用您的 Google 帳號登入：</p>
             <div id="g_id_onload"
-                data-client_id="130403455153-cdmr57ri7qh3s6c8riul6q6hsi3arjf8.apps.googleusercontent.com"
+                data-client_id="YOUR_GOOGLE_CLIENT_ID"
                 data-context="signin"
                 data-ux_mode="popup"
                 data-callback="handleCredentialResponse">
@@ -89,25 +103,53 @@
             </div>
             
             <div id="status" class="status"></div>
+            <div id="debugInfo"></div>
         </div>
     </div>
 
     <script>
+        // 顯示調試信息的函數
+        function log(message) {
+            const debugInfo = document.getElementById('debugInfo');
+            const time = new Date().toLocaleTimeString();
+            debugInfo.innerHTML += `[${time}] ${message}<br>`;
+            debugInfo.scrollTop = debugInfo.scrollHeight;
+            console.log(`[${time}] ${message}`);
+        }
+
         // Firebase 配置
         const firebaseConfig = {
-            apiKey: "AIzaSyArF8xncLwA3osSQ_o6yWIyuOc0TMrXRTY",
-            authDomain: "yingpei--login.firebaseapp.com",
-            databaseURL: "https://yingpei--login-default-rtdb.firebaseio.com",
-            projectId: "yingpei--login",
-            storageBucket: "yingpei--login.firebasestorage.app",
-            messagingSenderId: "261477282402",
-            appId: "1:261477282402:web:557f0be058e07cd642173b",
-            measurementId: "G-EB9PR17TJL"
+            apiKey: "YOUR_FIREBASE_API_KEY",
+            authDomain: "YOUR_FIREBASE_AUTH_DOMAIN",
+            databaseURL: "YOUR_FIREBASE_DATABASE_URL",
+            projectId: "YOUR_FIREBASE_PROJECT_ID",
+            storageBucket: "YOUR_FIREBASE_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_FIREBASE_MESSAGING_SENDER_ID",
+            appId: "YOUR_FIREBASE_APP_ID"
         };
         
         // 初始化 Firebase
-        firebase.initializeApp(firebaseConfig);
-        const database = firebase.database();
+        try {
+            firebase.initializeApp(firebaseConfig);
+            const database = firebase.database();
+            log("Firebase 初始化成功");
+            
+            // 測試 Firebase 連接
+            const connectedRef = database.ref(".info/connected");
+            connectedRef.on("value", (snap) => {
+                if (snap.val() === true) {
+                    log("已成功連接到 Firebase");
+                } else {
+                    log("未連接到 Firebase");
+                    document.getElementById('status').textContent = "Firebase 連接失敗，請檢查網路";
+                    document.getElementById('status').className = 'status warning';
+                }
+            });
+        } catch (error) {
+            log("Firebase 初始化失敗: " + error.message);
+            document.getElementById('status').textContent = "Firebase 初始化失敗: " + error.message;
+            document.getElementById('status').className = 'status error';
+        }
         
         let googleToken = null;
         let userEmail = null;
@@ -115,28 +157,39 @@
         let userPicture = null;
 
         function handleCredentialResponse(response) {
-            // 獲取 Google 的 ID Token
-            googleToken = response.credential;
-            
-            // 解析 token 獲取用戶資訊
-            const base64Url = googleToken.split('.')[1];
-            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-            const payload = JSON.parse(atob(base64));
-            
-            userEmail = payload.email;
-            userName = payload.name || 'Google 用戶';
-            userPicture = payload.picture || '';
-            
-            document.getElementById('loginSection').style.display = 'none';
-            document.getElementById('authenticatedSection').style.display = 'block';
-            
-            document.getElementById('status').textContent = `已登入：${userEmail}`;
-            document.getElementById('status').className = 'status success';
+            try {
+                // 獲取 Google 的 ID Token
+                googleToken = response.credential;
+                log("已獲取 Google 憑證");
+                
+                // 解析 token 獲取用戶資訊
+                const base64Url = googleToken.split('.')[1];
+                const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+                const payload = JSON.parse(atob(base64));
+                
+                userEmail = payload.email;
+                userName = payload.name || 'Google 用戶';
+                userPicture = payload.picture || '';
+                
+                log(`用戶信息獲取成功: ${userEmail}`);
+                
+                document.getElementById('loginSection').style.display = 'none';
+                document.getElementById('authenticatedSection').style.display = 'block';
+                document.getElementById('debugInfo').style.display = 'block';
+                
+                document.getElementById('status').textContent = `已登入：${userEmail}`;
+                document.getElementById('status').className = 'status success';
+            } catch (error) {
+                log("Google 登入處理失敗: " + error.message);
+                document.getElementById('status').textContent = "登入處理失敗: " + error.message;
+                document.getElementById('status').className = 'status error';
+            }
         }
 
         document.getElementById('scanButton').addEventListener('click', function() {
             const scanner = document.getElementById('scanner');
             scanner.style.display = 'block';
+            log("開始掃描 QR Code");
             
             const video = document.getElementById('video');
             const qrDecoder = new QrCodeDecoder();
@@ -145,13 +198,16 @@
                 .then(function(stream) {
                     video.srcObject = stream;
                     video.play();
+                    log("相機啟動成功");
                     
                     function scanQRCode() {
                         qrDecoder.decodeFromVideo(video)
                             .then(function(result) {
                                 if (result.data) {
                                     try {
+                                        log("掃描到 QR Code: " + result.data);
                                         const qrData = JSON.parse(result.data);
+                                        log("已解析 sessionId: " + qrData.sessionId);
                                         
                                         // 停止視訊流
                                         stream.getTracks().forEach(track => track.stop());
@@ -160,16 +216,15 @@
                                         // 發送 Token 到 Firebase
                                         sendTokenToDesktop(qrData.sessionId);
                                     } catch (e) {
-                                        // 無效的 QR Code 數據，繼續掃描
+                                        log("QR Code 解析失敗: " + e.message);
                                         setTimeout(scanQRCode, 500);
                                     }
                                 } else {
-                                    // 繼續掃描
                                     setTimeout(scanQRCode, 500);
                                 }
                             })
                             .catch(function(error) {
-                                // 繼續掃描
+                                log("掃描錯誤: " + error.message);
                                 setTimeout(scanQRCode, 500);
                             });
                     }
@@ -177,46 +232,61 @@
                     scanQRCode();
                 })
                 .catch(function(error) {
-                    console.error("無法存取相機: ", error);
+                    log("無法存取相機: " + error.message);
                     document.getElementById('status').textContent = "無法存取相機，請確保您已授權使用相機權限";
                     document.getElementById('status').className = 'status error';
                 });
         });
 
         function sendTokenToDesktop(sessionId) {
-            // 將授權資訊保存到 Firebase
-            const sessionRef = database.ref('sessions/' + sessionId);
-            
-            const authData = {
-                status: 'authorized',
-                googleToken: googleToken,
-                email: userEmail,
-                name: userName,
-                picture: userPicture,
-                timestamp: firebase.database.ServerValue.TIMESTAMP
-            };
-            
-            sessionRef.set(authData)
-                .then(() => {
-                    document.getElementById('status').textContent = "授權成功！電腦端正在登入...";
-                    document.getElementById('status').className = 'status success';
-                    
-                    // 監聽授權使用狀態
-                    sessionRef.child('used').on('value', (snapshot) => {
-                        if (snapshot.val() === true) {
-                            document.getElementById('status').textContent = "電腦端已成功接收授權並登入";
-                        }
+            try {
+                log("準備發送授權資訊到 sessionId: " + sessionId);
+                // 將授權資訊保存到 Firebase
+                const database = firebase.database();
+                const sessionRef = database.ref('sessions/' + sessionId);
+                
+                const authData = {
+                    status: 'authorized',
+                    googleToken: googleToken,
+                    email: userEmail,
+                    name: userName,
+                    picture: userPicture,
+                    timestamp: firebase.database.ServerValue.TIMESTAMP
+                };
+                
+                log("正在發送資料到 Firebase...");
+                
+                sessionRef.set(authData)
+                    .then(() => {
+                        log("資料已成功發送到 Firebase");
+                        document.getElementById('status').textContent = "授權成功！電腦端正在登入...";
+                        document.getElementById('status').className = 'status success';
+                        
+                        // 監聽授權使用狀態
+                        sessionRef.child('used').on('value', (snapshot) => {
+                            if (snapshot.val() === true) {
+                                log("電腦端已確認接收授權");
+                                document.getElementById('status').textContent = "電腦端已成功接收授權並登入";
+                            }
+                        });
+                        
+                        // 設置 15 分鐘後自動刪除
+                        setTimeout(() => {
+                            sessionRef.remove()
+                                .then(() => log("會話資料已自動清除"))
+                                .catch(err => log("清除會話資料失敗: " + err.message));
+                        }, 15 * 60 * 1000);
+                    })
+                    .catch((error) => {
+                        log("發送到 Firebase 失敗: " + error.message);
+                        document.getElementById('status').textContent = "傳送失敗: " + error.message;
+                        document.getElementById('status').className = 'status error';
                     });
-                    
-                    // 設置 15 分鐘後自動刪除
-                    setTimeout(() => {
-                        sessionRef.remove();
-                    }, 15 * 60 * 1000);
-                })
-                .catch((error) => {
-                    document.getElementById('status').textContent = "傳送失敗: " + error.message;
-                    document.getElementById('status').className = 'status error';
-                });
+            } catch (error) {
+                log("發送過程中出錯: " + error.message);
+                document.getElementById('status').textContent = "發送過程錯誤: " + error.message;
+                document.getElementById('status').className = 'status error';
+            }
         }
     </script>
 </body>

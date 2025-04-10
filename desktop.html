@@ -74,6 +74,34 @@
             background-color: #ffebee;
             padding: 15px;
         }
+        .warning {
+            color: orange;
+            background-color: #fff8e1;
+            padding: 15px;
+        }
+        #debugInfo {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 150px;
+            overflow-y: auto;
+            background-color: #f8f9fa;
+            text-align: left;
+        }
+        .refresh-button {
+            background-color: #4285f4;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 20px;
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -93,123 +121,240 @@
         <div id="qrcode"></div>
         
         <div id="status" class="status waiting">等待手機掃描登入...</div>
+        <button id="refreshButton" class="refresh-button" onclick="window.location.reload()">重新整理</button>
         
         <div id="userInfo" class="user-info">
             <img id="userPic" src="" alt="User Profile">
             <span id="userName"></span> (<span id="userEmail"></span>)
         </div>
+        
+        <div id="debugInfo"></div>
     </div>
 
     <script>
-        // Firebase 配置
-        const firebaseConfig = {
-           apiKey: "AIzaSyArF8xncLwA3osSQ_o6yWIyuOc0TMrXRTY",
-           authDomain: "yingpei--login.firebaseapp.com",
-           databaseURL: "https://yingpei--login-default-rtdb.firebaseio.com",
-           projectId: "yingpei--login",
-           storageBucket: "yingpei--login.firebasestorage.app",
-           messagingSenderId: "261477282402",
-           appId: "1:261477282402:web:557f0be058e07cd642173b",
-           measurementId: "G-EB9PR17TJL"
-        };
-        
-        // 初始化 Firebase
-        firebase.initializeApp(firebaseConfig);
-        const database = firebase.database();
-        
-        // 生成會話 ID
-        function generateSessionId() {
-            return 'session_' + Math.random().toString(36).substr(2, 9);
+        // 顯示調試信息的函數
+        function log(message) {
+            const debugInfo = document.getElementById('debugInfo');
+            const time = new Date().toLocaleTimeString();
+            debugInfo.innerHTML += `[${time}] ${message}<br>`;
+            debugInfo.scrollTop = debugInfo.scrollHeight;
+            console.log(`[${time}] ${message}`);
         }
 
-        // 設置會話 ID
-        const sessionId = generateSessionId();
-        
-        // 生成 QR Code 
-        const qrData = {
-            sessionId: sessionId
+        // Firebase 配置
+        const firebaseConfig = {
+            apiKey: "YOUR_FIREBASE_API_KEY",
+            authDomain: "YOUR_FIREBASE_AUTH_DOMAIN",
+            databaseURL: "YOUR_FIREBASE_DATABASE_URL",
+            projectId: "YOUR_FIREBASE_PROJECT_ID",
+            storageBucket: "YOUR_FIREBASE_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_FIREBASE_MESSAGING_SENDER_ID",
+            appId: "YOUR_FIREBASE_APP_ID"
         };
         
-        const qrcodeContainer = document.getElementById('qrcode');
-        const qrcode = new QRCode(qrcodeContainer, {
-            text: JSON.stringify(qrData),
-            width: 256,
-            height: 256,
-            colorDark: "#4285f4",
-            colorLight: "#ffffff",
-            correctLevel: QRCode.CorrectLevel.H
-        });
-
-        // 監聽 Firebase 授權狀態
-        const sessionRef = database.ref('sessions/' + sessionId);
-        sessionRef.on('value', (snapshot) => {
-            const data = snapshot.val();
+        // 宣告數據庫變數
+        let database;
+        let sessionRef;
+        let sessionId;
+        
+        // 初始化 Firebase
+        try {
+            firebase.initializeApp(firebaseConfig);
+            database = firebase.database();
+            log("Firebase 初始化成功");
             
-            if (data && data.status === 'authorized') {
-                document.getElementById('status').textContent = "授權成功！正在登入 Google...";
-                document.getElementById('status').className = 'status success';
+            // 測試 Firebase 連接
+            const connectedRef = database.ref(".info/connected");
+            connectedRef.on("value", (snap) => {
+                if (snap.val() === true) {
+                    log("已成功連接到 Firebase");
+                    initializeSession();
+                } else {
+                    log("未連接到 Firebase");
+                    document.getElementById('status').textContent = "Firebase 連接失敗，請檢查網路";
+                    document.getElementById('status').className = 'status warning';
+                    document.getElementById('refreshButton').style.display = 'inline-block';
+                }
+            });
+        } catch (error) {
+            log("Firebase 初始化失敗: " + error.message);
+            document.getElementById('status').textContent = "Firebase 初始化失敗: " + error.message;
+            document.getElementById('status').className = 'status error';
+            document.getElementById('refreshButton').style.display = 'inline-block';
+        }
+        
+        // 初始化會話
+        function initializeSession() {
+            try {
+                // 生成會話 ID
+                sessionId = 'session_' + Math.random().toString(36).substr(2, 9);
+                log("生成會話 ID: " + sessionId);
                 
-                // 顯示用戶資訊
-                document.getElementById('userPic').src = data.picture || 'https://www.gravatar.com/avatar/?d=mp';
-                document.getElementById('userName').textContent = data.name || '用戶';
-                document.getElementById('userEmail').textContent = data.email;
-                document.getElementById('userInfo').style.display = 'block';
+                // 創建參考
+                sessionRef = database.ref('sessions/' + sessionId);
                 
-                // 使用 Google 的 token 進行登入
-                handleGoogleLogin(data.googleToken);
-                
-                // 標記為已使用
-                sessionRef.child('used').set(true);
+                // 寫入初始數據以測試
+                sessionRef.set({
+                    status: 'waiting',
+                    created: firebase.database.ServerValue.TIMESTAMP
+                })
+                .then(() => {
+                    log("初始會話數據寫入成功");
+                    generateQRCode();
+                    setupAuthListener();
+                })
+                .catch((error) => {
+                    log("初始會話數據寫入失敗: " + error.message);
+                    document.getElementById('status').textContent = "無法創建會話: " + error.message;
+                    document.getElementById('status').className = 'status error';
+                    document.getElementById('refreshButton').style.display = 'inline-block';
+                });
+            } catch (error) {
+                log("初始化會話失敗: " + error.message);
+                document.getElementById('status').textContent = "初始化會話失敗: " + error.message;
+                document.getElementById('status').className = 'status error';
+                document.getElementById('refreshButton').style.display = 'inline-block';
             }
-        });
+        }
+        
+        // 生成 QR Code 
+        function generateQRCode() {
+            try {
+                const qrData = {
+                    sessionId: sessionId
+                };
+                
+                log("開始生成 QR Code");
+                
+                const qrcodeContainer = document.getElementById('qrcode');
+                qrcodeContainer.innerHTML = '';  // 清除現有內容
+                
+                const qrcode = new QRCode(qrcodeContainer, {
+                    text: JSON.stringify(qrData),
+                    width: 256,
+                    height: 256,
+                    colorDark: "#4285f4",
+                    colorLight: "#ffffff",
+                    correctLevel: QRCode.CorrectLevel.H
+                });
+                
+                log("QR Code 生成成功");
+            } catch (error) {
+                log("QR Code 生成失敗: " + error.message);
+                document.getElementById('status').textContent = "QR Code 生成失敗";
+                document.getElementById('status').className = 'status error';
+            }
+        }
+
+        // 設置授權監聽器
+        function setupAuthListener() {
+            try {
+                log("設置授權狀態監聽器");
+                
+                sessionRef.on('value', (snapshot) => {
+                    const data = snapshot.val();
+                    log("收到數據更新: " + JSON.stringify(data));
+                    
+                    if (data && data.status === 'authorized') {
+                        log("已收到授權");
+                        document.getElementById('status').textContent = "授權成功！正在登入 Google...";
+                        document.getElementById('status').className = 'status success';
+                        
+                        // 顯示用戶資訊
+                        document.getElementById('userPic').src = data.picture || 'https://www.gravatar.com/avatar/?d=mp';
+                        document.getElementById('userName').textContent = data.name || '用戶';
+                        document.getElementById('userEmail').textContent = data.email;
+                        document.getElementById('userInfo').style.display = 'block';
+                        
+                        // 使用 Google 的 token 進行登入
+                        handleGoogleLogin(data.googleToken);
+                        
+                        // 標記為已使用
+                        sessionRef.child('used').set(true);
+                    } else if (data && data.status === 'waiting') {
+                        log("等待授權中...");
+                    }
+                }, (error) => {
+                    log("監聽錯誤: " + error.message);
+                    document.getElementById('status').textContent = "監聽錯誤: " + error.message;
+                    document.getElementById('status').className = 'status error';
+                    document.getElementById('refreshButton').style.display = 'inline-block';
+                });
+            } catch (error) {
+                log("設置監聽器失敗: " + error.message);
+                document.getElementById('status').textContent = "設置監聽器失敗: " + error.message;
+                document.getElementById('status').className = 'status error';
+                document.getElementById('refreshButton').style.display = 'inline-block';
+            }
+        }
 
         // 處理 Google 登入
         function handleGoogleLogin(token) {
-            // 初始化 Google 客戶端
-            google.accounts.id.initialize({
-                client_id: '130403455153-cdmr57ri7qh3s6c8riul6q6hsi3arjf8.apps.googleusercontent.com'
-            });
-            
-            // 使用收到的 token 登入
-            // 在真實應用中，您需要使用 Google API 客戶端庫更複雜的方法
-            fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('Token 可能已過期');
-                }
-                return response.json();
-            })
-            .then(userData => {
-                document.getElementById('status').textContent = `已成功登入：${userData.email}`;
+            try {
+                log("開始處理 Google 登入");
+                // 初始化 Google 客戶端
+                google.accounts.id.initialize({
+                    client_id: 'YOUR_GOOGLE_CLIENT_ID'
+                });
                 
-                // 將使用者重定向到 Google 服務 (例如 Google Classroom 或 Gmail)
-                setTimeout(() => {
-                    window.location.href = 'https://classroom.google.com/';
-                }, 2000);
-            })
-            .catch(error => {
-                document.getElementById('status').textContent = "Google 登入失敗: " + error.message;
+                log("使用 token 獲取用戶資訊");
+                // 使用收到的 token 獲取用戶資訊
+                fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Token 可能已過期或無效');
+                    }
+                    return response.json();
+                })
+                .then(userData => {
+                    log("用戶資訊獲取成功: " + userData.email);
+                    document.getElementById('status').textContent = `已成功登入：${userData.email}`;
+                    
+                    // 將使用者重定向到 Google 服務 (例如 Google Classroom 或 Gmail)
+                    log("準備重定向到 Google Classroom");
+                    setTimeout(() => {
+                        window.location.href = 'https://classroom.google.com/';
+                    }, 2000);
+                })
+                .catch(error => {
+                    log("Google 登入失敗: " + error.message);
+                    document.getElementById('status').textContent = "Google 登入失敗: " + error.message;
+                    document.getElementById('status').className = 'status error';
+                    document.getElementById('refreshButton').style.display = 'inline-block';
+                });
+            } catch (error) {
+                log("處理 Google 登入過程中出錯: " + error.message);
+                document.getElementById('status').textContent = "處理登入錯誤: " + error.message;
                 document.getElementById('status').className = 'status error';
-            });
+                document.getElementById('refreshButton').style.display = 'inline-block';
+            }
         }
 
         // 設定會話過期處理
         setTimeout(() => {
-            // 檢查是否已授權
-            sessionRef.once('value', (snapshot) => {
-                const data = snapshot.val();
-                if (!data || !data.used) {
-                    document.getElementById('status').textContent = "二維碼已過期，請重新整理頁面";
-                    document.getElementById('status').className = 'status error';
-                    
-                    // 清除會話數據
-                    sessionRef.remove();
-                }
-            });
+            try {
+                // 檢查是否已授權
+                sessionRef.once('value', (snapshot) => {
+                    const data = snapshot.val();
+                    if (!data || !data.used) {
+                        log("QR 碼已過期");
+                        document.getElementById('status').textContent = "二維碼已過期，請重新整理頁面";
+                        document.getElementById('status').className = 'status warning';
+                        document.getElementById('refreshButton').style.display = 'inline-block';
+                        
+                        // 清除會話數據
+                        sessionRef.remove()
+                            .then(() => log("過期會話數據已清除"))
+                            .catch(err => log("清除過期數據失敗: " + err.message));
+                    }
+                });
+            } catch (error) {
+                log("檢查會話過期時出錯: " + error.message);
+            }
         }, 15 * 60 * 1000); // 15 分鐘
     </script>
 </body>
